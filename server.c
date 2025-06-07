@@ -59,5 +59,6 @@ int main() {
     fprintf(stdout, "Server recieved Buff: %s\n", buff);
 
     free(addr);
+    free(buff);
     return 0;
 }
