@@ -32,7 +32,7 @@ int main() {
     update_status(window, "Serveur démarré sur le port 8008 - Tapez vos messages");
 
 
-    char message_buffer[MAX_MESSAGE_LENGHT];
+    char input_buffer[MAX_MESSAGE_LENGHT];
     int ch;
     int input_pos = 0;
 
@@ -47,17 +47,22 @@ int main() {
             case KEY_ENTER:
                 if(input_pos > 0)
                 {
-                    message_buffer[input_pos] = '\0';
+                    input_buffer[input_pos] = '\0';
 
                     //Commandes...
-                    if(strcmp(message_buffer, "/quit") == 0)
+                    if(strcmp(input_buffer, "/quit") == 0)
                         server_running  = 0;
                     else{
-                        display_messages(window, "Vous", message_buffer);
+                        display_messages(window, "Vous", input_buffer);
                         /**
                          * 
                          * La logique ici est a completer
+                         *
                          */
+
+                        // Broadcast aux autres clients
+                        // broadcast_message(NULL, input_buffer);
+                         
                     }
 
                     // Nettoyer la zone d'entrer
@@ -83,7 +88,7 @@ int main() {
             default:
                 if(ch >= 32 && ch <= 126 && input_pos < MAX_MESSAGE_LENGHT -1)
                 {
-                    message_buffer[input_pos++]=ch;
+                    input_buffer[input_pos++]=ch;
                     mvwaddch(window->input_win, 1, input_pos, ch);
                     wrefresh(window->input_win);
                 }
