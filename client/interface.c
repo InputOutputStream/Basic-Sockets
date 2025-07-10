@@ -11,12 +11,6 @@
 #include <chat.h>
 #include <server.h>
 
-//Display the chat interface in the terminal with the messages, plus the keyboad + mouse support handleling
-/***
- * Would stay like this cause a few objects must be return for the inteface to be updated
- * we will se as we go
-*/
-
 
 // Variables globales
 client_t clients[MAX_CLIENT];
@@ -128,14 +122,17 @@ void update_status(window_t *window, const char *status) {
 
 void cleanup_interface(window_t *window) {
     if (window) {
-        delwin(window->msg_win);
-        delwin(window->users_win);
-        delwin(window->input_win);
-        delwin(window->status_win);
+        if (window->msg_win) delwin(window->msg_win);
+        if (window->users_win) delwin(window->users_win);
+        if (window->input_win) delwin(window->input_win);
+        if (window->status_win) delwin(window->status_win);
         free(window);
     }
     endwin();
 }
+
+
+
 
 
 
