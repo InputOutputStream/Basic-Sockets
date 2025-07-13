@@ -22,9 +22,6 @@
  * Chat handling header file
 */
 
-/**
- * From the oldest message to the newest
- */
 
 typedef struct MESSAGES
 {
@@ -83,16 +80,11 @@ typedef enum
 
 
 typedef enum {
-    WEREASE,
-} send_signal_t;
-
-
-typedef enum {
-    MSG_AUTH,           // Authentification
+    MSG_AUTH_REQ,       // Authentification
     MSG_SEND,           // Envoyer message
     MSG_CHANNEL,        // Send message to channel
     MSG_BROADCAST_CLIENTS,      // Message diffusé
-    MSG_CREATE_CHANNEL,   // creer un salon
+    MSG_CREATE_CHANNEL,  // creer un salon
     MSG_JOIN_CHANNEL,   // Rejoindre salon
     MSG_LEAVE_CHANNEL,  // Quitter salon
     MSG_LIST_USERS,     // Lister utilisateurs
@@ -102,14 +94,17 @@ typedef enum {
 
 
 typedef enum {
-    MSG_AUTH_OK,        // Authentification réussie
+    MSG_AUTH_ACK,        // Authentification réussie
     MSG_AUTH_FAIL,      // Authentification échouée
-    MSG_BROADCAST,      // Message diffusé
     MSG_USER_JOIN,      // Utilisateur rejoint
+    MSG_BROADCAST,      // Message diffusé
     MSG_USER_LEAVE,     // Utilisateur part
+    MSG_CHANNEL_CREATION,   // Confirmation de la creation d'un cannal
     MSG_USER_LIST,      // Liste des utilisateurs
-    MSG_ERROR,          // Erreur serveur
-    MSG_PING            // Ping du serveur
+    MSG_SERVER_ERROR,   // Erreur serveur
+    MSG_PING,            // Ping du serveur
+    MSG_SERVER_INFO,    // Info
+    MSG_MSG,            // Message element
 } server_message_type_t;
 
 // Variables globales avec mutex pour le controle d'acces

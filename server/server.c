@@ -8,6 +8,7 @@
 #include <semaphore.h>
 #include <time.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include <chat.h>
 #include <server.h>
@@ -46,6 +47,8 @@ int start_message_server()
         return -1;
     }
 
+    fprintf(stdout, "server address = %s\n", inet_ntoa(server_addr.sin_addr));
+
     //C'est Ici que tout commence, logique du server de chat
     pthread_t accept_thread;
     int *server_fd_ptr = calloc(1, sizeof(int));
@@ -53,8 +56,6 @@ int start_message_server()
 
     pthread_create(&accept_thread, NULL, accept_connections, server_fd_ptr);
     pthread_detach(accept_thread); // terminate automatically on close
-
-    clean_up_clients(accept_thread);
     return 0;
 }
 
@@ -68,6 +69,7 @@ void *accept_connections(void *arg) {
         socklen_t addr_len = sizeof(client_addr);
         int client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &addr_len);
         if (client_fd < 0) continue; // on n'a pas reussi a le connecter bah on passe
+        fprintf(stdout, "New client Accepted: addr = %s \n", inet_ntoa(client_addr.sin_addr));
 
         pthread_mutex_lock(&clients_mutex);
         if(client_count < MAX_CLIENT)
@@ -87,6 +89,7 @@ void *accept_connections(void *arg) {
             client_count++;
         }
         else {
+            fprintf(stdout, "Connection Rejected: %s  \n", inet_ntoa(client_addr.sin_addr));
             close(client_fd); // Reject connection
         }
 
@@ -110,55 +113,6 @@ message_t init_message(client_t client, char *buffer)
     return new;
 }
 
-int get_chat_id(char *buffer)
-{
-    int i = 1, st = 0, stp = 0; 
-    if(buffer[0] != '[')
-    {
-        fprintf(stderr, "Missing chat id from message\n");
-        return -1;
-    }
-
-    st = i;
-    while(buffer[i] != ']')
-    {
-        i++;
-    }
-    stp = i;
-
-    char *sid = (buffer + st + 1);
-    char *dest = malloc(stp-st+1);
-    strncpy(dest, sid, stp-st);
-    dest[stp-st] = '\0';
-    int result = atoi(dest);
-    free(dest);
-    return result;
-}
-
-int get_rec_id(char *buffer)
-{
-    int i = 1, st = 0, stp = 0; 
-    if(buffer[0] != '%')
-    {
-        fprintf(stderr, "Missing receiver id from message\n");
-        return -1;
-    }
-
-    st = i;
-    while(buffer[i] != '%')
-    {
-        i++;
-    }
-    stp = i;
-
-    char *sid = (buffer + st + 1);
-    char *dest = malloc(stp-st+1);
-    strncpy(dest, sid, stp-st);
-    dest[stp-st] = '\0';
-    int result = atoi(dest);
-    free(dest);
-    return result;
-}
 
 void clean_up_clients(pthread_t accept_thread)
 {
@@ -174,75 +128,102 @@ void clean_up_clients(pthread_t accept_thread)
     return;
 }
 
-int *get_chat_clients_ids(char *buffer, int *id_numbers)
-{
+char* extract_delimited_content(char *buffer, char start_char, char end_char, int *start_pos) {
+    char *pos = strchr(buffer + *start_pos, start_char);
+    if (!pos) {
+        return NULL;
+    }
+    
+    int start_idx = pos - buffer + 1;
+    char *end_pos = strchr(pos + 1, end_char);
+    if (!end_pos) {
+        return NULL;
+    }
+    
+    int len = end_pos - pos - 1;
+    if (len <= 0) {
+        return NULL;
+    }
+    
+    char *result = malloc(len + 1);
+    strncpy(result, buffer + start_idx, len);
+    result[len] = '\0';
+    
+    *start_pos = end_pos - buffer + 1; // Update position for next search
+    return result;
+}
 
-    if(buffer[0] != '%') {
+int get_chat_id(char *buffer) {
+    int start_pos = 0;
+    char *content = extract_delimited_content(buffer, '[', ']', &start_pos);
+    
+    if (!content) {
+        fprintf(stderr, "Missing chat id from message\n");
+        return -1;
+    }
+    
+    int result = atoi(content);
+    free(content);
+    return result;
+}
+
+int get_rec_id(char *buffer) {
+    int start_pos = 0;
+    char *content = extract_delimited_content(buffer, '%', '%', &start_pos);
+    
+    if (!content) {
+        fprintf(stderr, "Missing receiver id from message\n");
+        return -1;
+    }
+    
+    int result = atoi(content);
+    free(content);
+    return result;
+}
+
+int *get_chat_clients_ids(char *buffer, int *id_numbers) {
+    int start_pos = 0;
+    char *content = extract_delimited_content(buffer, '{', '}', &start_pos);
+    
+    if (!content) {
         fprintf(stderr, "Missing receiver id from message\n");
         *id_numbers = 0;
         return NULL;
     }
     
-    // Find the closing %
-    int end_pos = 1;
-    while(buffer[end_pos] != '%' && buffer[end_pos] != '\0') {
-        end_pos++;
-    }
-
-    if(buffer[end_pos] != '%') {
-        *id_numbers = 0;
-        return NULL;
-    }
-
-    // Extract the ID string
-    int len = end_pos - 1;
-    char *id_str = malloc(len + 1);
-    strncpy(id_str, buffer + 1, len);
-    id_str[len] = '\0';
-
-
     // Count commas to determine array size
     int count = 1;
-    for(int i = 0; i < len; i++) {
-        if(id_str[i] == ',') count++;
+    for (int i = 0; content[i]; i++) {
+        if (content[i] == ',') count++;
     }
     
     int *result = malloc(count * sizeof(int));
     int index = 0;
     
-    char *token = strtok(id_str, ",");
-    while(token != NULL && index < count) {
+    char *token = strtok(content, ",");
+    while (token && index < count) {
         result[index++] = atoi(token);
         token = strtok(NULL, ",");
     }
-
+    
     *id_numbers = index;
-    free(id_str);
+    free(content);
     return result;
 }
 
 client_message_type_t init_type_message(char *msg_types_buffer)
 {
-    int i = 1, st = 0, stp = 0; 
-    if(msg_types_buffer[0] != '#')
-    {
-        fprintf(stderr, "Missing msg_type from message\n");
-        return -1;
+    int start_pos = 0;
+    char *content = extract_delimited_content(msg_types_buffer, '#', '#', &start_pos);
+    
+    if (!content) {
+        fprintf(stderr, "Missing message type from message\n");
+        client_message_type_t new = {0};
+        return new;
     }
 
-    st = i;
-    while(msg_types_buffer[i] != '#')
-    {
-        i++;
-    }
-    stp = i;
-
-    char *sid = (msg_types_buffer + st + 1);
-    char *dest = malloc(stp-st+1);
-    strncpy(dest, sid, stp-st);
-    dest[stp-st] = '\0';
-    int result = atoi(dest);
-    free(dest);
+    int result = atoi(content);
+    free(content);
     return result;
 }
 
@@ -256,16 +237,13 @@ void *handle_client(void *arg)
     // Separate thread to handle each client operation
     while(server_running && client->active)
     {
-        size_t __attribute_maybe_unused__ msg_types = recv(client->client_fd, msg_type_buffer, sizeof(msg_type_buffer)-1, 0);
-        size_t __attribute_maybe_unused__ bytes = recv(client->client_fd, buffer, sizeof(buffer)-1, 0);
+        size_t bytes = recv(client->client_fd, buffer, sizeof(buffer)-1, 0);
 
-        if(msg_types <= 0 || bytes <= 0) {
+        if(bytes <= 0) {
+            fprintf(stdout, "Connection closed with client: id = %d, name = %s \n", client->client_id, client->client_name);
             break; // Connection closed or error
         }
 
-        if(msg_types > 0) {
-            msg_type_buffer[msg_types] = '\0';
-        }
         if(bytes > 0) {
             buffer[bytes] = '\0';
         }
@@ -277,12 +255,10 @@ void *handle_client(void *arg)
         int *ids  = {0};
         int id_number = 0;
 
-        if(msg_types == 0) break;
-
-        client_message_type_t new = init_type_message(msg_type_buffer);
+        client_message_type_t new = init_type_message(buffer);
 
         switch(new){
-            case MSG_AUTH:
+            case MSG_AUTH_REQ:
                 // Will be implemented later
                 break;
             case MSG_BROADCAST_CLIENTS:
@@ -292,6 +268,7 @@ void *handle_client(void *arg)
                 remove_client(client);
                 break;
             case MSG_SEND: 
+                // Send a message to a connected comm client
                 rec_id = get_rec_id(buffer);
                 if(rec_id < 0) break;
                 client_t *receiver = find_client_by_id(rec_id);
@@ -360,26 +337,56 @@ void send_to_chat(client_t *sender, int *chat_clients_ids, int id_number, char *
     pthread_mutex_unlock(&clients_mutex);
 }
 
-// Broadcast a cleint message to all other clients
+int safe_send(int sockfd, const char *message, size_t len) {
+    size_t total_sent = 0;
+    while (total_sent < len) {
+        ssize_t sent = send(sockfd, message + total_sent, len - total_sent, MSG_NOSIGNAL);
+        if (sent < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // Socket buffer full, could use select/poll here
+                continue;
+            }
+            return -1; // Error
+        }
+        total_sent += sent;
+    }
+    return 0; // Success
+}
+
 void broadcast_message(client_t *sender, const char *message) {
     pthread_mutex_lock(&clients_mutex);
+    
+    size_t msg_len = strlen(message);
+    
     for (int i = 0; i < client_count; i++) {
         if (clients[i].active && clients[i].client_fd != sender->client_fd) {
-            send(clients[i].client_fd, message, strlen(message), 0);
-            clients[i].msg_count++;
+            fprintf(stdout, "send to %s: %s\n", clients[i].client_name, message);
+            
+            if (safe_send(clients[i].client_fd, message, msg_len) < 0) {
+                perror("Send broadcast failed");
+                // _mark_as_incative(i);
+            } else {
+                clients[i].msg_count++;
+            }
         }
     }
+    
     pthread_mutex_unlock(&clients_mutex);
 }
 
+void _mark_as_incative(int i)
+{
+ // Mark client as inactive on send failure
+    clients[i].active = 0;
+    close(clients[i].client_fd);
+}
 
 void mark_as_inactive(client_t *client) {
     pthread_mutex_lock(&clients_mutex);
     for(int i = 0; i < client_count; i++) {
         if(&clients[i] == client) {
             // Mark as inactive instead of shifting
-            clients[i].active = 0;
-            close(clients[i].client_fd);
+            _mark_as_incative(i);
             break;
         }
     }
@@ -391,7 +398,7 @@ void remove_client(client_t *client) {
 }
 
 
-int __attribute_maybe_unused__ leave_chat(client_t *client, size_t chat_id)
+int leave_chat(client_t *client, size_t chat_id)
 {
     /***
      * Will implement but lets first finish with the one on one communication
@@ -489,15 +496,6 @@ void free_chats(chat_t *chat)
 {
     free(chat);
 }
-
-
-// int broadcast_updates(chat_t *chats, send_signal_t signal)
-// {
-
-//     return 0;
-// }
-
-
 
 void signal_handler(int sig) {
 

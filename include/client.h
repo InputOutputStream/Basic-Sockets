@@ -40,16 +40,24 @@ typedef struct CLIENT_APP {
     int running;
 } client_app_t;
 
+typedef struct ARGS
+{
+    window_t *window;
+    int fd;
+}args_t;
 
 
 int auto_reconnect(const char *ip, int port);
-int send_message_to_user(int receiver_id, const char *message);
+int send_message_to_user(int receiver_id, const char *message, int client_fd);
 
+char* get_message_content(char *buffer);
+int get_message_type(char *buffer);
+void update_client_list_from_server(window_t *window, const char *client_data);
 int connect_to_server(const char *addr, int port);
-void client_signal_handler(int sig);
+void client_signal_handler(int sig, int client_fd);
 void* receive_messages(void *arg);
-int send_formatted_message(int msg_type, const char *message);
-void broadcast_message(void *sender, const char *message);
+int send_formatted_message(int msg_type, const char *message, int client_fd);
+char* extract_delimited_content(char *buffer, char start_char, char end_char, int *start_pos);
 
 window_t* init_interface();
 void cleanup_interface(window_t *window);
